@@ -4,7 +4,12 @@
 
 package ratelimit
 
-import "io"
+import (
+	"io"
+	"net/http"
+
+	"github.com/astaxie/beego/context"
+)
 
 type reader struct {
 	r      io.Reader
@@ -48,4 +53,33 @@ func Writer(w io.Writer, bucket *Bucket) io.Writer {
 func (w *writer) Write(buf []byte) (int, error) {
 	w.bucket.Wait(int64(len(buf)))
 	return w.w.Write(buf)
+}
+
+type writer2 struct {
+	w      *context.Response
+	bucket *Bucket
+}
+
+func Writer2(w *context.Response, bucket *Bucket) http.ResponseWriter {
+	return &writer2{
+		w:      w,
+		bucket: bucket,
+	}
+}
+
+func (w *writer2) Write(buf []byte) (int, error) {
+	w.bucket.Wait(int64(len(buf)))
+	return w.w.Write(buf)
+}
+func (w *writer2) Header() http.Header {
+	return w.w.ResponseWriter.Header()
+}
+func (w *writer2) WriteHeader(code int) {
+	if w.w.Status > 0 {
+		//prevent multiple response.WriteHeader calls
+		return
+	}
+	w.w.Status = code
+	w.w.Started = true
+	w.w.ResponseWriter.WriteHeader(code)
 }
